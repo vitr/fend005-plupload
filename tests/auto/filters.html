@@ -4,15 +4,7 @@
 <meta charset="UTF-8" />
 <title>Plupload: Test Internal Filters</title>
 
-<!-- qunit -->
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
-<link rel="stylesheet" href="http://code.jquery.com/qunit/qunit-git.css" type="text/css" />
-<script src="http://code.jquery.com/qunit/qunit-git.js"></script>
-
-<!-- testrunner -->
-<script src="../js/reporter.js"></script>
-<script src="../scriptloader.js"></script>
-<script src="../tools/FileHash.js"></script>
+<script src="../loader.js"></script>
 
 <script type="text/javascript">
 
@@ -185,6 +177,70 @@ test('options.filters.mime_types', function() {
 
 			up.setOption('filters', filters);
 			up.addFile(files[1]);
+		}
+	);
+
+
+	up.bind('PostInit', function() {
+		o.inSeries(queue, function() {
+			start();
+		});
+	});
+
+	up.bind('Error', function(up, err) {
+		up.trigger('TestError', err);
+	});
+
+	stop();
+	up.init();
+
+	// introduce special event that can be binded or unbinded without problems
+	up.bind('FilesAdded', function(up, files) {
+		up.trigger('TestFilesAdded', files);
+	});
+});
+
+
+test('options.filters.mime_types (passing actual mime types directly)', function() {
+
+	var files = FileHash.getRuntimeFiles();
+
+	// test file type check by extension
+	var up = new plupload.Uploader(o.extend({
+		filters : {
+			mime_types: 'image/*'
+		}
+	}, this.options));
+
+	var queue = [];
+
+	queue.push(
+		// o.File
+		function(cb) {
+			up.bind('TestError', function(up, err) {
+				equal(err.code, plupload.FILE_EXTENSION_ERROR, 
+					"Error triggered, code: FILE_EXTENSION_ERROR.");
+				equal(up.files.length, 0, 
+					"No files were added to the queue.");
+				equal(o.typeOf(up.settings.filters.mime_types), 'array', 
+					"Alternative (mime_types: 'image/*') format successfully parsed.");
+
+				up.unbind('TestError');
+				cb();
+			});
+			up.addFile(files[1]); // adding "03.jpg.zip"
+		},
+
+		// plupload.File
+		function(cb) {
+			file = new plupload.File(files[1]);
+			up.bind('TestFilesAdded', function(up) {
+				equal(up.files.length, 1, "Image (jpeg) successfully added.");
+				up.unbind('TestFilesAdded');
+				cb();
+			});
+
+			up.addFile(files[0]);
 		}
 	);
 
@@ -436,14 +492,64 @@ test('options.filters.prevent_duplicates', function() {
 });
 
 
+test('options.filters.prevent_empty', function() {
+	expect(2);
+
+	var file = FileHash.getEmptyFile();
+
+	// test file type check by extension
+	var up = new plupload.Uploader(o.extend({
+		filters: {
+			prevent_empty: true
+		}
+	}, this.options));
+
+	var queue = [];
+
+	queue.push(
+		function(cb) {
+			up.bind('TestError', function(up, err) {
+				equal(err.code, plupload.FILE_SIZE_ERROR, "Error triggered, code: FILE_SIZE_ERROR.");
+				equal(up.files.length, 0, "Empty file (0kb) has been ignored.");
+				up.unbind('TestError');
+				cb();
+			});
+
+			up.bind('TestFilesAdded', function(up) {
+				up.unbind('TestFilesAdded');
+				equal(up.files.length, 0, "Empty file (0kb) has been ignored.");
+				cb();
+			});
+
+			up.addFile(file);
+		}
+	);
+
+
+	up.bind('PostInit', function() {
+		o.inSeries(queue, function() {
+			start();
+		});
+	});
+
+	stop();
+	up.init();
+
+	// introduce special event that can be binded or unbinded without problems
+	up.bind('FilesAdded', function(up, files) {
+		up.trigger('TestFilesAdded', files);
+	});
+
+	up.bind('Error', function(up, err) {
+		up.trigger('TestError', err);
+	});
+});
+
+
 </script>
 </head>
 <body>
-	<h1 id="qunit-header">Plupload: Test Uploader</h1>
-	<h2 id="qunit-banner"></h2>
-	<h2 id="qunit-userAgent"></h2>
-	<ol id="qunit-tests">
-	</ol>
+	<div id="qunit"></div>
     <div id="qunit-fixture" style="position: relative; top: 0 !important; left: 0 !important; width: 100%; height: 9px;"></div>
 </body>
 </html>
